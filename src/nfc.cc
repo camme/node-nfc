@@ -15,22 +15,18 @@ namespace {
     struct NFC: ObjectWrap {
         static Handle<Value> New(const Arguments& args);
         static Handle<Value> Start(const Arguments& args);
-        v8::Local<v8::Object> t;
     };
 
-    const Arguments *mainArgs;
-    int test;
-    static NFC* self;
 
-    void print_hex(const uint8_t *pbtData, const size_t szBytes) {
+    //void print_hex(const uint8_t *pbtData, const size_t szBytes) {
 
-        size_t  szPos;
-        for (szPos = 0; szPos < szBytes; szPos++) {
-            printf("%02x-", pbtData[szPos]);
-        }
-        printf("\n");
+        //size_t  szPos;
+        //for (szPos = 0; szPos < szBytes; szPos++) {
+            //printf("%02x-", pbtData[szPos]);
+        //}
+        //printf("\n");
 
-    }
+    //}
 
 
 
@@ -41,10 +37,8 @@ namespace {
     Handle<Value> NFC::New(const Arguments& args) {
         HandleScope scope;
         assert(args.IsConstructCall());
-        self = new NFC();
+        NFC* self = new NFC();
         self->Wrap(args.This());
-        self->t = args.This();
-        test = 4;
         return scope.Close(args.This());
     }
 
@@ -59,9 +53,6 @@ namespace {
 
         HandleScope scope;
 
-        printf("tjena\n");
-
-
         Baton* baton = new Baton();
 
         nfc_device *pnd;
@@ -74,7 +65,6 @@ namespace {
         baton->pnd = pnd;
         baton->context = context;
         baton->nt = nt;
-        //baton->args = &args;
 
         Handle<Function> cb = Handle<Function>::Cast(args.This());
 
