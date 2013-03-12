@@ -13,13 +13,16 @@ namespace {
     void AfterNFCRead(uv_work_t* req);
 
     struct NFC: ObjectWrap {
-        Handle<Value> New(const Arguments& args);
+        static Handle<Value> New(const Arguments& args);
         static Handle<Value> Foo(const Arguments& args);
-        Handle<Value> Start(const Arguments& args);
+        static Handle<Value> Start(const Arguments& args);
+        v8::Local<v8::Object> t;
     };
 
     const Arguments *mainArgs;
     NFC* self;
+
+        int test;
 
     void print_hex(const uint8_t *pbtData, const size_t szBytes) {
 
@@ -41,6 +44,8 @@ namespace {
         assert(args.IsConstructCall());
         self = new NFC();
         self->Wrap(args.This());
+        self->t = args.This();
+        test = 4;
 
         return scope.Close(args.This());
     }
@@ -55,6 +60,7 @@ namespace {
     Handle<Value> NFC::Start(const Arguments& args) {
 
         printf("START\n");
+        printf("%d\n",test);
         HandleScope scope;
 
         mainArgs = &args;
@@ -67,7 +73,6 @@ namespace {
 
         pnd = nfc_open(context, NULL);
 
-        printf("2\n");
         baton->pnd = pnd;
         baton->context = context;
         baton->nt = nt;
@@ -132,6 +137,7 @@ namespace {
         print_hex(baton->nt.nti.nai.abtUid, baton->nt.nti.nai.szUidLen);
         printf("STOP\n");
 
+        printf("%d\n",test);
         //SEND
         Handle<Value> argv[2] = {
             String::New("uid"), // event name
@@ -141,7 +147,7 @@ namespace {
         };
 
         printf("HH\n");
-        MakeCallback(baton->args->This(), "emit", 2, argv);
+        MakeCallback(self->t, "emit", 2, argv);
         printf("II\n");
 
         delete req;
@@ -163,21 +169,14 @@ namespace {
         return Undefined();
     }
 
-    //extern "C" void init(Handle<Object> target) {
-        //HandleScope scope;
-        //Local<FunctionTemplate> t = FunctionTemplate::New(NFC::New);
-        //t->InstanceTemplate()->SetInternalFieldCount(1);
-        //t->SetClassName(String::New("NFC"));
-        //NODE_SET_PROTOTYPE_METHOD(t, "foo", NFC::Foo);
-        //NODE_SET_PROTOTYPE_METHOD(t, "start", NFC::Start);
-        //target->Set(String::NewSymbol("NFC"), t->GetFunction());
-    //}
-
-    void init(Handle<Object> exports) {
-        exports->Set(String::NewSymbol("nfc"), FunctionTemplate::New(NFC.New)->GetFunction());
+    extern "C" void init(Handle<Object> target) {
+        HandleScope scope;
+        Local<FunctionTemplate> t = FunctionTemplate::New(NFC::New);
+        t->InstanceTemplate()->SetInternalFieldCount(1);
+        t->SetClassName(String::New("NFC"));
+        NODE_SET_PROTOTYPE_METHOD(t, "foo", NFC::Foo);
+        NODE_SET_PROTOTYPE_METHOD(t, "start", NFC::Start);
+        target->Set(String::NewSymbol("NFC"), t->GetFunction());
     }
-
-    NODE_MODULE(nfc, init);
-
 
 }
