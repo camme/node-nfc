@@ -1,7 +1,8 @@
-var NFC = require(__dirname + '/build/Release/nfc').init;
+var NFC = require(__dirname + '/build/Release/nfc').NFC;
 var events = require('events');
 
 inherits(NFC, events.EventEmitter);
+
 exports.nfc = NFC;
 
 // extend prototype

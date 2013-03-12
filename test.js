@@ -2,13 +2,15 @@ var nfc = require('./index').nfc;
 
 var n = new nfc();
 
-setInterval(function() {
-    console.log('tjena');
-}, 1000);
+//setInterval(function() {
+    //console.log('NON BLOCK');
+//}, 1000);
 
-nfc.on('uid', function(uid) {
+n.on('uid', function(uid) {
     console.log('UID:', uid);
 });
+
+n.start();
 
 
 

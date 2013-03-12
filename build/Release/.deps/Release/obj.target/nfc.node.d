@@ -1,1 +1,0 @@
-cmd_Release/obj.target/nfc.node := flock ./Release/linker.lock g++ -shared -pthread -rdynamic -m64  -Wl,-soname=nfc.node -o Release/obj.target/nfc.node -Wl,--start-group Release/obj.target/nfc/src/nfc.o -Wl,--end-group -lnfc
