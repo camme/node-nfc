@@ -33,6 +33,11 @@ Or to compile it yourself, make sure you have node-gyp
 
 In order to use the module you need to install libnfc and libusb. Read more about [libnfc here](http://nfc-tools.org/index.php?title=Libnfc)
 
+## Installation errors
+Here is a list of possible issues that might come up on installation:
+
+- If you, when installing with npm, get an error of a missing nfc.h, it means that libnfc isnt installed correctly.
+
 ## License 
 
 (The MIT License)

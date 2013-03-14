@@ -17,23 +17,6 @@ namespace {
         static Handle<Value> Start(const Arguments& args);
     };
 
-
-    //void print_hex(const uint8_t *pbtData, const size_t szBytes) {
-
-        //size_t  szPos;
-        //for (szPos = 0; szPos < szBytes; szPos++) {
-            //printf("%02x-", pbtData[szPos]);
-        //}
-        //printf("\n");
-
-    //}
-
-
-
-    int conv_dword_to_int(unsigned char * buf) {
-        return (( * (buf + 3)) << 24) + (( * (buf + 2)) << 16) + (( * (buf + 1)) << 8) + ( * (buf + 0));
-    }
-
     Handle<Value> NFC::New(const Arguments& args) {
         HandleScope scope;
         assert(args.IsConstructCall());
