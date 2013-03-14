@@ -3,6 +3,7 @@
 TOOLSET := target
 TARGET := nfc
 DEFS_Debug := \
+	'-D_DARWIN_USE_64_BIT_INODE=1' \
 	'-D_LARGEFILE_SOURCE' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-DBUILDING_NODE_EXTENSION' \
@@ -11,53 +12,77 @@ DEFS_Debug := \
 
 # Flags passed to all source files.
 CFLAGS_Debug := \
-	-fPIC \
+	-Os \
+	-gdwarf-2 \
+	-Wnewline-eof \
+	-mmacosx-version-min=10.5 \
+	-arch x86_64 \
 	-Wall \
-	-pthread \
-	-m64 \
-	-g \
-	-O0
+	-Wendif-labels \
+	-W \
+	-Wno-unused-parameter
 
 # Flags passed to only C files.
-CFLAGS_C_Debug :=
+CFLAGS_C_Debug := \
+	-fno-strict-aliasing
 
 # Flags passed to only C++ files.
 CFLAGS_CC_Debug := \
 	-fno-rtti \
-	-fno-exceptions
+	-fno-exceptions \
+	-fno-threadsafe-statics \
+	-fno-strict-aliasing
+
+# Flags passed to only ObjC files.
+CFLAGS_OBJC_Debug :=
+
+# Flags passed to only ObjC++ files.
+CFLAGS_OBJCC_Debug :=
 
 INCS_Debug := \
-	-I/home/camilo/.node-gyp/0.8.22/src \
-	-I/home/camilo/.node-gyp/0.8.22/deps/uv/include \
-	-I/home/camilo/.node-gyp/0.8.22/deps/v8/include
+	-I/Users/camilo/.node-gyp/0.8.5/src \
+	-I/Users/camilo/.node-gyp/0.8.5/deps/uv/include \
+	-I/Users/camilo/.node-gyp/0.8.5/deps/v8/include
 
 DEFS_Release := \
+	'-D_DARWIN_USE_64_BIT_INODE=1' \
 	'-D_LARGEFILE_SOURCE' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-DBUILDING_NODE_EXTENSION'
 
 # Flags passed to all source files.
 CFLAGS_Release := \
-	-fPIC \
+	-Os \
+	-gdwarf-2 \
+	-Wnewline-eof \
+	-mmacosx-version-min=10.5 \
+	-arch x86_64 \
 	-Wall \
-	-pthread \
-	-m64 \
-	-O2 \
-	-fno-strict-aliasing \
-	-fno-tree-vrp
+	-Wendif-labels \
+	-W \
+	-Wno-unused-parameter
 
 # Flags passed to only C files.
-CFLAGS_C_Release :=
+CFLAGS_C_Release := \
+	-fno-strict-aliasing
 
 # Flags passed to only C++ files.
 CFLAGS_CC_Release := \
 	-fno-rtti \
-	-fno-exceptions
+	-fno-exceptions \
+	-fno-threadsafe-statics \
+	-fno-strict-aliasing
+
+# Flags passed to only ObjC files.
+CFLAGS_OBJC_Release :=
+
+# Flags passed to only ObjC++ files.
+CFLAGS_OBJCC_Release :=
 
 INCS_Release := \
-	-I/home/camilo/.node-gyp/0.8.22/src \
-	-I/home/camilo/.node-gyp/0.8.22/deps/uv/include \
-	-I/home/camilo/.node-gyp/0.8.22/deps/v8/include
+	-I/Users/camilo/.node-gyp/0.8.5/src \
+	-I/Users/camilo/.node-gyp/0.8.5/deps/uv/include \
+	-I/Users/camilo/.node-gyp/0.8.5/deps/v8/include
 
 OBJS := \
 	$(obj).target/$(TARGET)/src/nfc.o
@@ -70,6 +95,8 @@ all_deps += $(OBJS)
 $(OBJS): TOOLSET := $(TOOLSET)
 $(OBJS): GYP_CFLAGS := $(DEFS_$(BUILDTYPE)) $(INCS_$(BUILDTYPE))  $(CFLAGS_$(BUILDTYPE)) $(CFLAGS_C_$(BUILDTYPE))
 $(OBJS): GYP_CXXFLAGS := $(DEFS_$(BUILDTYPE)) $(INCS_$(BUILDTYPE))  $(CFLAGS_$(BUILDTYPE)) $(CFLAGS_CC_$(BUILDTYPE))
+$(OBJS): GYP_OBJCFLAGS := $(DEFS_$(BUILDTYPE)) $(INCS_$(BUILDTYPE))  $(CFLAGS_$(BUILDTYPE)) $(CFLAGS_C_$(BUILDTYPE)) $(CFLAGS_OBJC_$(BUILDTYPE))
+$(OBJS): GYP_OBJCXXFLAGS := $(DEFS_$(BUILDTYPE)) $(INCS_$(BUILDTYPE))  $(CFLAGS_$(BUILDTYPE)) $(CFLAGS_CC_$(BUILDTYPE)) $(CFLAGS_OBJCC_$(BUILDTYPE))
 
 # Suffix rules, putting all outputs into $(obj).
 
@@ -87,38 +114,44 @@ $(obj).$(TOOLSET)/$(TARGET)/%.o: $(obj)/%.cc FORCE_DO_CMD
 # End of this set of suffix rules
 ### Rules for final target.
 LDFLAGS_Debug := \
-	-pthread \
-	-rdynamic \
-	-m64
+	-Wl,-search_paths_first \
+	-mmacosx-version-min=10.5 \
+	-arch x86_64 \
+	-L$(builddir) \
+	-install_name @rpath/nfc.node
+
+LIBTOOLFLAGS_Debug := \
+	-Wl,-search_paths_first
 
 LDFLAGS_Release := \
-	-pthread \
-	-rdynamic \
-	-m64
+	-Wl,-search_paths_first \
+	-mmacosx-version-min=10.5 \
+	-arch x86_64 \
+	-L$(builddir) \
+	-install_name @rpath/nfc.node
+
+LIBTOOLFLAGS_Release := \
+	-Wl,-search_paths_first
 
 LIBS := \
+	-undefined dynamic_lookup \
 	-lnfc
 
-$(obj).target/nfc.node: GYP_LDFLAGS := $(LDFLAGS_$(BUILDTYPE))
-$(obj).target/nfc.node: LIBS := $(LIBS)
-$(obj).target/nfc.node: TOOLSET := $(TOOLSET)
-$(obj).target/nfc.node: $(OBJS) FORCE_DO_CMD
+$(builddir)/nfc.node: GYP_LDFLAGS := $(LDFLAGS_$(BUILDTYPE))
+$(builddir)/nfc.node: LIBS := $(LIBS)
+$(builddir)/nfc.node: GYP_LIBTOOLFLAGS := $(LIBTOOLFLAGS_$(BUILDTYPE))
+$(builddir)/nfc.node: TOOLSET := $(TOOLSET)
+$(builddir)/nfc.node: $(OBJS) FORCE_DO_CMD
 	$(call do_cmd,solink_module)
 
-all_deps += $(obj).target/nfc.node
+all_deps += $(builddir)/nfc.node
 # Add target alias
 .PHONY: nfc
 nfc: $(builddir)/nfc.node
 
-# Copy this to the executable output path.
-$(builddir)/nfc.node: TOOLSET := $(TOOLSET)
-$(builddir)/nfc.node: $(obj).target/nfc.node FORCE_DO_CMD
-	$(call do_cmd,copy)
-
-all_deps += $(builddir)/nfc.node
 # Short alias for building this executable.
 .PHONY: nfc.node
-nfc.node: $(obj).target/nfc.node $(builddir)/nfc.node
+nfc.node: $(builddir)/nfc.node
 
 # Add executable to "all" target.
 .PHONY: all
