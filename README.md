@@ -36,7 +36,7 @@ In order to use the module you need to install libnfc and libusb. Read more abou
 ## Installation errors
 Here is a list of possible issues that might come up on installation:
 
-- If you, when installing with npm, get an error of a missing nfc.h, it means that libnfc isnt installed correctly.
+- If you, when installing with npm, get an **error of a missing nfc.h**, it means that libnfc isnt installed correctly.
 
 ## License 
 
