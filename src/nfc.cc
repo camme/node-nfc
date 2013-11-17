@@ -11,6 +11,8 @@ namespace {
 
     void NFCRead(uv_work_t* req);
     void AfterNFCRead(uv_work_t* req);
+    
+    NODE_MODULE(nfc, init)
 
     struct NFC: ObjectWrap {
         static Handle<Value> New(const Arguments& args);
