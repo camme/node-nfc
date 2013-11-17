@@ -69,7 +69,7 @@ namespace {
         req->data = baton;
 
         //int status = uv_queue_work(uv_default_loop(), req, NFCRead, AfterNFCRead);
-        uv_queue_work(uv_default_loop(), req, NFCRead, AfterNFCRead);
+        uv_queue_work(uv_default_loop(), req, NFCRead, (uv_after_work_cb)AfterNFCRead);
 
         return Undefined();
 
@@ -81,7 +81,7 @@ namespace {
 
         uv_work_t *req = new uv_work_t();
         req->data = baton;
-        uv_queue_work(uv_default_loop(), req, NFCRead, AfterNFCRead);
+        uv_queue_work(uv_default_loop(), req, NFCRead, (uv_after_work_cb)AfterNFCRead);
 
         //int status = uv_queue_work(uv_default_loop(), req, NFCRead, AfterNFCRead);
     }
