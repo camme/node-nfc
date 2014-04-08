@@ -1,1 +1,1 @@
-cmd_Release/nfc.node := ./gyp-mac-tool flock ./Release/linker.lock c++ -shared -Wl,-search_paths_first -mmacosx-version-min=10.5 -arch x86_64 -L./Release -install_name @rpath/nfc.node  -o Release/nfc.node Release/obj.target/nfc/src/nfc.o -undefined dynamic_lookup -lnfc
+cmd_Release/nfc.node := rm -rf "Release/nfc.node" && cp -af "Release/obj.target/nfc.node" "Release/nfc.node"

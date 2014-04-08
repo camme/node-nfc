@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include <err.h>
 #include <nfc/nfc.h>
 #include <v8.h>
@@ -90,9 +91,13 @@ namespace {
 
         Baton* baton = static_cast<Baton*>(req->data);
 
+        //nfc_modulation nmMifare;
+	//nmMifare.nmt = NMT_ISO14443A;
+	//nmMifare.nbr = NBR_106;
+
         const nfc_modulation nmMifare = {
-            .nmt = NMT_ISO14443A,
-            .nbr = NBR_106,
+            NMT_ISO14443A,
+            NBR_106,
         };
 
         baton->error = true;
