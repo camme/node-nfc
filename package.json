@@ -1,6 +1,6 @@
 {
   "name": "nfc",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Node NFC functionallity through libnfc",
   "main": "index.js",
   "scripts": {
