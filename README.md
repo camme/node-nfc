@@ -38,6 +38,13 @@ Here is a list of possible issues that might come up on installation:
 
 - If you, when installing with npm, get an **error of a missing nfc.h**, it means that libnfc isnt installed correctly.
 
+### Getting "Unable to claim USB interface (Permission denied)"
+
+On osx you can try:
+
+    $ sudo launchctl list | grep pcscd
+    $ sudo kill -9 [pid]
+
 ## License 
 
 (The MIT License)
