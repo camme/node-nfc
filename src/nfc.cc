@@ -154,7 +154,7 @@ namespace {
             switch (baton->nt.nti.nai.abtAtqa[1]) {
                 case 0x04:
                 {
-                    object->Set(NODE_PSYMBOL("model"), String::New("mifare-classic"));
+                    object->Set(NODE_PSYMBOL("tag"), String::New("mifare-classic"));
 
                     // size guessing logic from nfc-mfclassic.c
                     uint8_t uiBlocks =   ((baton->nt.nti.nai.abtAtqa[1] & 0x02) == 0x02) ? 0xff    //  4Kb
@@ -260,7 +260,7 @@ namespace {
 
                 case 0x44:
                 {
-                    object->Set(NODE_PSYMBOL("model"), String::New("mifare-ultralight"));
+                    object->Set(NODE_PSYMBOL("tag"), String::New("mifare-ultralight"));
 
                     if (nfc_device_set_property_bool(baton->pnd, NP_EASY_FRAMING, true) < 0) {
                         snprintf(result, sizeof result, "nfc_device_set_property_bool easyFraming=false: %s",

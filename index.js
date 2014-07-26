@@ -28,6 +28,11 @@ exports.nfc.parse = function(data) {
     }
 
     tlv.len = bytes[i++];
+    if (tlv.len === 0xff) {
+      if ((i + 1) >= bytes.length) break;
+      tlv.len = bytes[i++] << 8;
+      tlv.len += bytes[i++];
+    }
     if ((tlv.len > 0) && ((i + tlv.len) < bytes.length)) tlv.value = bytes.slice(i, i + tlv.len);
     if ((tlv.type === 0x03) && (!!tlv.value)) tlv.ndef = ndef.decodeMessage(tlv.value);
     if (!!tlv.value) tlv.value = ndef.util.bytesToHexString(tlv.value);
