@@ -1,50 +1,75 @@
 node-nfc
 ========
+A binding from libnfc to node.
+At present,
+only reading is supported.
 
-A first try at binding libnfc to node. This project is right now not good enough to use. It is also my first real C++ module so dont use it in production. Feel free to contribute.
-
-## Current release
-This version only exposes an event that is triggered when a NFC tag is on the reader.
-
-If you still want to try it, here is how it works:
-
-
-    var nfc = require('nfc').nfc;
-    var n = new nfc();
-
-    n.on('uid', function(uid) {
-        console.log('UID:', uid);
-    });
-
-    n.start();
-    
 ## Installation
+
+### Step 1: Prerequisites
+In order to use the module you need to install libnfc and libusb.
+Read more about [libnfc here](http://nfc-tools.org/index.php?title=Libnfc).
+
+On Linux, you want:
+
+    sudo apt-get update
+    sudo apt-get upgrade
+    sudo apt-get install libusb-dev libnfc
+
+On MacOS X, you want:
+
+    brew update
+    brew doctor
+    brew install libusb-compat libnfc
+
+### Step 2: Installation
 
 To install it, use npm:
 
     npm install nfc
     
-Or to compile it yourself, make sure you have node-gyp
+Or, to compile it yourself, make sure you have node-gyp:
 
     node-gyp configure
     node-gyp build
 
-## Prerequisites
+### NPM errors
 
-In order to use the module you need to install libnfc and libusb. Read more about [libnfc here](http://nfc-tools.org/index.php?title=Libnfc)
+- An error of **missing nfc.h** indicates that libnfc isn't installed correctly.
 
-## Installation errors
-Here is a list of possible issues that might come up on installation:
+### Runtime errors
 
-- If you, when installing with npm, get an **error of a missing nfc.h**, it means that libnfc isnt installed correctly.
+- An error of **Unable to claim USB interface (Permission denied)**
+indicates that another process has the interface. On MacOS X you can try:
 
-### Getting "Unable to claim USB interface (Permission denied)"
+    $ sudo killall pcscd
 
-On osx you can try:
 
-    $ sudo launchctl list | grep pcscd
-    $ sudo kill -9 [pid]
+## Initialization and Information
 
+    var nfc  = require('nfc').nfc
+      , util = require('util')
+      ;
+
+    console.log('version: ' + util.inspect(version, { depth: null }));
+        // { name: 'libfnc', version: '1.7.0' }
+
+    console.log('devices: ' + util.inspect(devices, { depth: null }));
+        // { 'pn53x_usb:160:012': { name: 'SCM Micro / SCL3711-NFC&RW', info: { chip: 'PN533 v2.7', ... } } }
+
+## Reading
+
+    var device = new nfc.NFC();
+    device.on('read', function(tag) {
+        // { deviceID: '...', name: '...', uid: '...', type: 0x04 (Mifare Classic) or 0x44 (Mifare Ultralight) }
+
+        if ((!!tag.data) && (!!tag.offset)) console.log(util.inspect(nfc.parse(tag.data.slice(tag.offset)), { depth: null }));
+    }).on('error', function(err) {
+        // handle background error;
+    }).start();
+    // optionally the start function may include the deviceID (e.g., 'pn53x_usb:160:012')
+
+    
 ## License 
 
 (The MIT License)
