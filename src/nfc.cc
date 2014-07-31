@@ -5,6 +5,8 @@
 #include <v8.h>
 #include <node.h>
 #include <node_buffer.h>
+
+// covered by the BSD 2-Clause license
 #include "mifare.h"
 
 using namespace v8;
@@ -12,8 +14,8 @@ using namespace node;
 
 
 static const nfc_modulation nmMifare = {
-  .nmt = NMT_ISO14443A,
-  .nbr = NBR_106,
+  NMT_ISO14443A,
+  NBR_106,
 };
 static uint8_t keys[] = {
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
