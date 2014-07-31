@@ -5,6 +5,8 @@
 #include <v8.h>
 #include <node.h>
 #include <node_buffer.h>
+
+// covered by the BSD 2-Clause license
 #include "mifare.h"
 
 using namespace v8;
