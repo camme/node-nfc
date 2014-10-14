@@ -10,11 +10,11 @@
 using namespace v8;
 using namespace node;
 
-
 static const nfc_modulation nmMifare = {
-  .nmt = NMT_ISO14443A,
-  .nbr = NBR_106,
+  NMT_ISO14443A,
+  NBR_106,
 };
+
 static uint8_t keys[] = {
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
   0xd3, 0xf7, 0xd3, 0xf7, 0xd3, 0xf7,
