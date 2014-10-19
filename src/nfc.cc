@@ -28,6 +28,9 @@ static uint8_t keys[] = {
 };
 static size_t num_keys = sizeof(keys) / 6;
 
+static nfc_device *dev;
+static nfc_context *cont;
+static bool stopped = 0;
 
 namespace {
 
@@ -37,6 +40,7 @@ namespace {
     struct NFC: ObjectWrap {
         static Handle<Value> New(const Arguments& args);
         static Handle<Value> Start(const Arguments& args);
+        static Handle<Value> Stop(const Arguments& args);
     };
 
     Handle<Value> NFC::New(const Arguments& args) {
@@ -81,6 +85,9 @@ namespace {
             return ThrowException(Exception::Error(String::New("unable open NFC device")));
         }
 
+        dev = pnd;
+        cont = context;
+
         char result[BUFSIZ];
         if (nfc_initiator_init(pnd) < 0) {
             snprintf(result, sizeof result, "nfc_initiator_init: %s", nfc_strerror(pnd));
@@ -107,13 +114,22 @@ namespace {
         return scope.Close(object);
     }
 
+    Handle<Value> NFC::Stop(const Arguments& args) {
+        HandleScope scope;
+        stopped = 1;
+    }
+
     void Loop(Baton *baton) {
 
         HandleScope scope;
-
-        uv_work_t *req = new uv_work_t();
-        req->data = baton;
-        uv_queue_work(uv_default_loop(), req, NFCRead, (uv_after_work_cb)AfterNFCRead);
+        if (!stopped) {
+            uv_work_t *req = new uv_work_t();
+            req->data = baton;
+            uv_queue_work(uv_default_loop(), req, NFCRead, (uv_after_work_cb)AfterNFCRead);
+        } else {
+            nfc_close(baton->pnd);
+            nfc_exit(baton->context);
+        }
     }
 
     void NFCRead(uv_work_t* req) {
@@ -370,6 +386,7 @@ namespace {
         t->InstanceTemplate()->SetInternalFieldCount(1);
         t->SetClassName(String::New("NFC"));
         NODE_SET_PROTOTYPE_METHOD(t, "start", NFC::Start);
+        NODE_SET_PROTOTYPE_METHOD(t, "stop", NFC::Stop);
         target->Set(String::NewSymbol("NFC"), t->GetFunction());
 
         target->Set(String::NewSymbol("scan"), FunctionTemplate::New(Scan)->GetFunction());
