@@ -117,6 +117,13 @@ namespace {
     Handle<Value> NFC::Stop(const Arguments& args) {
         HandleScope scope;
         stopped = 1;
+
+        nfc_close(dev);
+        nfc_exit(cont);
+
+        Local<Object> object = Object::New();
+
+        return scope.Close(object);
     }
 
     void Loop(Baton *baton) {
@@ -127,14 +134,12 @@ namespace {
             req->data = baton;
             uv_queue_work(uv_default_loop(), req, NFCRead, (uv_after_work_cb)AfterNFCRead);
         } else {
-            nfc_close(baton->pnd);
-            nfc_exit(baton->context);
+            stopped = 0;
         }
     }
 
     void NFCRead(uv_work_t* req) {
         Baton* baton = static_cast<Baton*>(req->data);
-
         baton->error = nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) <= 0;
     }
 
@@ -145,6 +150,10 @@ namespace {
         HandleScope scope;
 
         Baton* baton = static_cast<Baton*>(req->data);
+        if (stopped) {
+            Loop(baton);
+            return;
+        }
 
         if (!baton->error) {
             unsigned long cc, n;
