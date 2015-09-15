@@ -1,4 +1,4 @@
-var nfc    = require(__dirname + '/build/Release/nfc')
+var nfc    = require('bindings')('nfc')
   , events = require('events')
   , ndef   = require('ndef')
   ;
@@ -9,7 +9,6 @@ var inherits = function(target, source) {
     }
 };
 inherits(nfc.NFC, events.EventEmitter);
-
 
 exports.nfc = { version : nfc.version
               , NFC     : nfc.NFC

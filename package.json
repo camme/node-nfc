@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "install": "node-gyp rebuild"
+    "install": "node-gyp clean configure rebuild"
   },
   "repository": {
     "type": "git",
@@ -15,9 +15,19 @@
     "nfc"
   ],
   "dependencies": {
-     "ndef": "0.0.4"
+     "ndef": "0.0.4",
+     "bindings": "^1.2.1",
+     "nan": "^2.0.5",
+     "node-gyp": "^1.0.3"
   },
   "author": "Camilo Tapia <camilo.tapia@gmail.com>",
+  "maintainers": [
+    {
+      "name": "Jeroen Vollenbrock",
+      "email": "jeroen@athom.nl",
+      "url": "http://athom.nl"
+    }
+  ],
   "license": "MIT",
   "gypfile": true
 }
