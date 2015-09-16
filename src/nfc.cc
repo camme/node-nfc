@@ -244,7 +244,7 @@ namespace {
             Local<Object> self = GetFromPersistent("self").As<Object>();
             Nan::MakeCallback(self, "emit", 2, argv);
             busy = 0;
-            run = self->Get(Nan::New("_run").ToLocalChecked());
+            //run = self->Get(Nan::New("_run").ToLocalChecked());
             //cleanup
         }
 
