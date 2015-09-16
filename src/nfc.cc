@@ -33,29 +33,23 @@ namespace {
         static NAN_METHOD(New);
         static NAN_METHOD(Start);
         static NAN_METHOD(Stop);
-    };
 
-    struct Baton {
         nfc_device *pnd;
         nfc_target nt;
         nfc_context *context;
-        Local<Object> self;
-        bool error;
+        bool run;
     };
-
 
     class NFCReadWorker : public Nan::AsyncProgressWorker {
       public:
-        NFCReadWorker(Baton *baton)
-            : Nan::AsyncProgressWorker(new Nan::Callback(baton->self.As<Function>())), baton(baton) {
-                SaveToPersistent("self", baton->self);
-                run = true;
+        NFCReadWorker(NFC *baton, Local<Object>self)
+            : Nan::AsyncProgressWorker(new Nan::Callback(self.As<Function>())), baton(baton) {
+                SaveToPersistent("self", self);
+                baton->run = true;
         }
 
         ~NFCReadWorker() {
             delete callback; //For some reason HandleProgressCallback only fires while callback exists.
-            nfc_close(baton->pnd);
-            nfc_exit(baton->context);
         }
 
         void HandleOKCallback() {
@@ -63,6 +57,9 @@ namespace {
 
             Local<Object> self = GetFromPersistent("self").As<Object>();
             Nan::MakeCallback(self, "emit", 1, &argv);
+
+            if(baton->pnd) nfc_close(baton->pnd);
+            if(baton->context) nfc_exit(baton->context);
         }
 
         void HandleErrorCallback() {
@@ -76,10 +73,8 @@ namespace {
         }
 
         void Execute(const AsyncProgressWorker::ExecutionProgress& progress) {
-            while(run) {
-                if(nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) <= 0) {
-                    AsyncProgressWorker::SetErrorMessage("An error occured while selecting passive NFC target.");
-                } else {
+            while(baton->run) {
+                if(nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) > 0) {
                     busy = true;
                     progress.Send((const char *)&busy, sizeof(busy));
                     int timeout = 500;
@@ -87,7 +82,7 @@ namespace {
                         usleep(10 * 1000);
                     }
                     if(timeout <= 0) {
-                        run = false;
+                        baton->run = false;
                     }
                 }
             }
@@ -96,11 +91,14 @@ namespace {
         #define MAX_DEVICE_COUNT 16
         #define MAX_FRAME_LENGTH 264
 
-        void HandleProgressCallback(const char *unused1, size_t unused2) {
+        void HandleProgressCallback(const char *unused1, size_t tag_present) {
             Nan::HandleScope scope;
             unsigned long cc, n;
             char *bp, result[BUFSIZ];
             const char *sp;
+
+            if(!baton->pnd) return;
+
             Local<Object> object = Nan::New<Object>();
             object->Set(Nan::New("deviceID").ToLocalChecked(), Nan::New(nfc_device_get_connstring(baton->pnd)).ToLocalChecked());
             object->Set(Nan::New("name").ToLocalChecked(), Nan::New(nfc_device_get_name(baton->pnd)).ToLocalChecked());
@@ -259,20 +257,17 @@ namespace {
 
             busy = false;
 
-            Local<Object> self = GetFromPersistent("self").As<Object>();
-            run = !self->Get(Nan::New("_abort").ToLocalChecked())->IsTrue();
-
             Local<Value> argv[2];
             argv[0] = Nan::New("read").ToLocalChecked();
             argv[1] = object;
             
+            Local<Object> self = GetFromPersistent("self").As<Object>();
             Nan::MakeCallback(self, "emit", 2, argv);
         }
 
       private:
-        Baton *baton;
+        NFC *baton;
         bool busy;
-        bool run;
     };
 
 
@@ -286,8 +281,13 @@ namespace {
 
     NAN_METHOD(NFC::Stop) {
         Nan::HandleScope scope;
-        if(info.This()->IsObject()) {
-            info.This()->Set(Nan::New("_abort").ToLocalChecked(), Nan::New<Boolean>(true));
+        NFC* nfc = ObjectWrap::Unwrap<NFC>(info.This());
+        nfc->run = false;
+        if(nfc->pnd) {
+            nfc_close(nfc->pnd);
+            nfc->pnd = NULL;
+            nfc_exit(nfc->context);
+            nfc->context = NULL;
         }
         info.GetReturnValue().Set(info.This());
     }
@@ -326,13 +326,11 @@ namespace {
             return Nan::ThrowError(result);
         }
 
-        Baton* baton = new Baton();
+        NFC *baton = ObjectWrap::Unwrap<NFC>(info.This());
         baton->context = context;
         baton->pnd = pnd;
 
-        baton->self = info.This();
-
-        NFCReadWorker* readWorker = new NFCReadWorker(baton);
+        NFCReadWorker* readWorker = new NFCReadWorker(baton, info.This());
         Nan::AsyncQueueWorker(readWorker);
 
         Local<Object> object = Nan::New<Object>();
