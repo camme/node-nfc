@@ -32,6 +32,7 @@ namespace {
       public:
         static NAN_METHOD(New);
         static NAN_METHOD(Start);
+        static NAN_METHOD(Stop);
     };
 
     struct Baton {
@@ -48,28 +49,32 @@ namespace {
         NFCReadWorker(Baton *baton)
             : Nan::AsyncProgressWorker(new Nan::Callback(baton->self.As<Function>())), baton(baton) {
                 SaveToPersistent("self", baton->self);
-                run = 1;
+                run = true;
         }
 
         ~NFCReadWorker() {
             delete callback; //For some reason HandleProgressCallback only fires while callback exists.
+            nfc_close(baton->pnd);
+            nfc_exit(baton->context);
         }
 
         void HandleOKCallback() {} // prevent default
 
-        void HandleErrorCallback() {
-            //TODO: cleanup
-        } // prevent default
+        void HandleErrorCallback() {} // prevent default
 
         void Execute(const AsyncProgressWorker::ExecutionProgress& progress) {
             while(run) {
                 if(nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) <= 0) {
                     AsyncProgressWorker::SetErrorMessage("An error occured while selecting passive NFC target.");
                 } else {
-                    busy = 1;
+                    busy = true;
                     progress.Send((const char *)&busy, sizeof(busy));
-                    while(busy && run) {
+                    int timeout = 500;
+                    while(busy && --timeout != 0) {
                         usleep(10 * 1000);
+                    }
+                    if(timeout <= 0) {
+                        run = false;
                     }
                 }
             }
@@ -238,20 +243,21 @@ namespace {
                 default:
                     break;
             }
+
             Local<Value> argv[2];
             argv[0] = Nan::New("read").ToLocalChecked();
             argv[1] = object;
             Local<Object> self = GetFromPersistent("self").As<Object>();
             Nan::MakeCallback(self, "emit", 2, argv);
-            busy = 0;
-            //run = self->Get(Nan::New("_run").ToLocalChecked());
+            busy = false;
+            run = !self->Get(Nan::New("_abort").ToLocalChecked())->IsTrue();
             //cleanup
         }
 
       private:
         Baton *baton;
-        int busy;
-        int run;
+        bool busy;
+        bool run;
     };
 
 
@@ -260,6 +266,14 @@ namespace {
         assert(info.IsConstructCall());
         NFC* self = new NFC();
         self->Wrap(info.This());
+        info.GetReturnValue().Set(info.This());
+    }
+
+    NAN_METHOD(NFC::Stop) {
+        Nan::HandleScope scope;
+        if(info.This()->IsObject()) {
+            info.This()->Set(Nan::New("_abort").ToLocalChecked(), Nan::New<Boolean>(true));
+        }
         info.GetReturnValue().Set(info.This());
     }
 
@@ -370,7 +384,7 @@ namespace {
         tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
         SetPrototypeMethod(tpl, "start", NFC::Start);
-        //SetPrototypeMethod(tpl, "stop", NFC::Stop);
+        SetPrototypeMethod(tpl, "stop", NFC::Stop);
 
         Nan::Export(target, "version", Version);
         Nan::Export(target, "scan", Scan);
