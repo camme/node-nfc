@@ -21,6 +21,10 @@ function read(deviceID) {
     console.log(util.inspect(err, { depth: null }));
   });
 
+  nfcdev.on('stopped', function() {
+    console.log('stopped');
+  });
+
   console.log(nfcdev.start(deviceID));
 }
 

@@ -58,9 +58,22 @@ namespace {
             nfc_exit(baton->context);
         }
 
-        void HandleOKCallback() {} // prevent default
+        void HandleOKCallback() {
+            Local<Value> argv = Nan::New("stopped").ToLocalChecked();
 
-        void HandleErrorCallback() {} // prevent default
+            Local<Object> self = GetFromPersistent("self").As<Object>();
+            Nan::MakeCallback(self, "emit", 1, &argv);
+        }
+
+        void HandleErrorCallback() {
+            Local<Value> argv[1];
+            argv[0] = Nan::New("error").ToLocalChecked();
+            argv[1] = Nan::Error(AsyncProgressWorker::ErrorMessage());
+
+            Local<Object> self = GetFromPersistent("self").As<Object>();
+            Nan::MakeCallback(self, "emit", 2, argv);
+            HandleOKCallback();
+        }
 
         void Execute(const AsyncProgressWorker::ExecutionProgress& progress) {
             while(run) {
@@ -244,14 +257,16 @@ namespace {
                     break;
             }
 
+            busy = false;
+
+            Local<Object> self = GetFromPersistent("self").As<Object>();
+            run = !self->Get(Nan::New("_abort").ToLocalChecked())->IsTrue();
+
             Local<Value> argv[2];
             argv[0] = Nan::New("read").ToLocalChecked();
             argv[1] = object;
-            Local<Object> self = GetFromPersistent("self").As<Object>();
+            
             Nan::MakeCallback(self, "emit", 2, argv);
-            busy = false;
-            run = !self->Get(Nan::New("_abort").ToLocalChecked())->IsTrue();
-            //cleanup
         }
 
       private:
