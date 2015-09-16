@@ -34,10 +34,98 @@ namespace {
         static NAN_METHOD(Start);
         static NAN_METHOD(Stop);
 
+        void stop() {
+            run = false;
+            while(claimed);
+            if(pnd) {
+                nfc_abort_command(pnd);
+                nfc_close(pnd);
+                pnd = NULL;
+            }
+            if(context) {
+                nfc_exit(context);
+                context = NULL;
+            }
+        }
+
         nfc_device *pnd;
         nfc_target nt;
         nfc_context *context;
         bool run;
+        bool claimed;
+    };
+
+    class NFCCard {
+      public:
+        NFCCard() {
+            deviceID = name = uid = tag = error = NULL;
+            type = data_size = offset = 0;
+            data = NULL;
+        }
+
+        ~NFCCard() {
+            delete deviceID;
+            delete name;
+            delete uid;
+            delete tag;
+            delete error;
+            if(data) delete data;
+        }
+
+        void AddToNodeObject(Local<Object> object) {
+            if(deviceID) object->Set(Nan::New("deviceID").ToLocalChecked(), Nan::New(deviceID).ToLocalChecked());
+            if(name) object->Set(Nan::New("name").ToLocalChecked(), Nan::New(name).ToLocalChecked());
+            if(uid) object->Set(Nan::New("uid").ToLocalChecked(), Nan::New(uid).ToLocalChecked());
+            if(type) object->Set(Nan::New("type").ToLocalChecked(), Nan::New<Int32>(type));
+            if(tag) object->Set(Nan::New("tag").ToLocalChecked(), Nan::New(tag).ToLocalChecked());
+            if(error) object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(error));
+            if(data) object->Set(Nan::New("data").ToLocalChecked(), Nan::NewBuffer((char *)&data, data_size).ToLocalChecked());
+            if(offset) object->Set(Nan::New("offset").ToLocalChecked(), Nan::New<Int32>(offset));
+            data = NULL; //ownership transferred to nodejs
+        }
+
+        void SetDeviceID(const char *deviceID) {
+            if(this->deviceID) delete this->deviceID;
+            this->deviceID = strdup(deviceID);
+        }
+        void SetName(const char *name) {
+            if(this->name) delete this->name;
+            this->name = strdup(name);
+        }
+        void SetUID(const char *uid) {
+            if(this->uid) delete this->uid;
+            this->uid = strdup(uid);
+        }
+        void SetType(int32_t type) {
+            this->type = type;
+        }
+        void SetTag(const char *tag) {
+            if(this->tag) delete this->tag;
+            this->tag = strdup(tag);
+        }
+        void SetError(const char *error) {
+            if(this->error) delete this->error;
+            this->error = strdup(error);
+        }
+        void SetOffset(size_t offset) {
+            this->offset = offset;
+        }
+        void SetData(const uint8_t *data, size_t data_size) {
+            if(this->data) free(this->data);
+            this->data_size = data_size;
+            this->data = (uint8_t*)malloc(data_size);
+            memcpy(this->data, data, data_size);
+        }
+      private:
+        char        *deviceID;
+        char        *name;
+        char        *uid;
+        int32_t     type;
+        char        *tag;
+        char        *error;
+        size_t      offset;
+        size_t      data_size;
+        uint8_t     *data;
     };
 
     class NFCReadWorker : public Nan::AsyncProgressWorker {
@@ -57,9 +145,6 @@ namespace {
 
             Local<Object> self = GetFromPersistent("self").As<Object>();
             Nan::MakeCallback(self, "emit", 1, &argv);
-
-            if(baton->pnd) nfc_close(baton->pnd);
-            if(baton->context) nfc_exit(baton->context);
         }
 
         void HandleErrorCallback() {
@@ -73,17 +158,23 @@ namespace {
         }
 
         void Execute(const AsyncProgressWorker::ExecutionProgress& progress) {
-            while(baton->run) {
-                if(nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) > 0) {
-                    busy = true;
-                    progress.Send((const char *)&busy, sizeof(busy));
-                    int timeout = 500;
-                    while(busy && --timeout != 0) {
-                        usleep(10 * 1000);
-                    }
-                    if(timeout <= 0) {
-                        baton->run = false;
-                    }
+            while(baton->run && nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) > 0) {
+                baton->claimed = true;
+                tag = new NFCCard();
+                if(baton->run) ReadTag(tag);
+                baton->claimed = false;
+
+                progress.Send(NULL, 0);
+
+                int timeout = 5 * 1000; //5 second timeout
+                while(baton->run && tag && --timeout > 0) {
+                    usleep(1000);
+                }
+                if(timeout <= 0) {
+                    //unresponsive VM, node was likely killed while this devide was not stopped.
+                    baton->stop();
+                    baton->run = false;
+                    fprintf(stderr, "Node was stopped while some NFC devices where still started.\n");
                 }
             }
         }
@@ -91,17 +182,13 @@ namespace {
         #define MAX_DEVICE_COUNT 16
         #define MAX_FRAME_LENGTH 264
 
-        void HandleProgressCallback(const char *unused1, size_t tag_present) {
-            Nan::HandleScope scope;
+        void ReadTag(NFCCard *tag) {
             unsigned long cc, n;
             char *bp, result[BUFSIZ];
             const char *sp;
 
-            if(!baton->pnd) return;
-
-            Local<Object> object = Nan::New<Object>();
-            object->Set(Nan::New("deviceID").ToLocalChecked(), Nan::New(nfc_device_get_connstring(baton->pnd)).ToLocalChecked());
-            object->Set(Nan::New("name").ToLocalChecked(), Nan::New(nfc_device_get_name(baton->pnd)).ToLocalChecked());
+            tag->SetDeviceID(nfc_device_get_connstring(baton->pnd));
+            tag->SetName(nfc_device_get_name(baton->pnd));
 
             cc = baton->nt.nti.nai.szUidLen;
             if (cc > sizeof baton->nt.nti.nai.abtUid) cc = sizeof baton->nt.nti.nai.abtUid;
@@ -111,13 +198,13 @@ namespace {
             for (n = 0, bp = uid, sp = ""; n < cc; n++, bp += strlen(bp), sp = ":") {
                 snprintf(bp, sizeof uid - (bp - uid), "%s%02x", sp, baton->nt.nti.nai.abtUid[n]);
             }
-            object->Set(Nan::New("uid").ToLocalChecked(), Nan::New(uid).ToLocalChecked());
-            object->Set(Nan::New("type").ToLocalChecked(), Nan::New<Int32>(baton->nt.nti.nai.abtAtqa[1]));
+            tag->SetUID(uid);
+            tag->SetType(baton->nt.nti.nai.abtAtqa[1]);
 
             switch (baton->nt.nti.nai.abtAtqa[1]) {
                 case 0x04:
                 {
-                    object->Set(Nan::New("tag").ToLocalChecked(), Nan::New("mifare-classic").ToLocalChecked());
+                    tag->SetTag("mifare-classic");
 
                     // size guessing logic from nfc-mfclassic.c
                     uint8_t uiBlocks =   ((baton->nt.nti.nai.abtAtqa[1] & 0x02) == 0x02) ? 0xff    //  4Kb
@@ -126,7 +213,7 @@ namespace {
                     if (nfc_device_set_property_bool(baton->pnd, NP_EASY_FRAMING, false) < 0) {
                         snprintf(result, sizeof result, "nfc_device_set_property_bool easyFraming=false: %s",
                                  nfc_strerror(baton->pnd));
-                        object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(result));
+                        tag->SetError(result);
                         break;
                     }
                     uint8_t abtRats[2] = { 0xe0, 0x50 };
@@ -139,7 +226,7 @@ namespace {
                             if (nfc_device_set_property_bool(baton->pnd, NP_ACTIVATE_FIELD, flip > 0) < 0) {
                                 snprintf(result, sizeof result, "nfc_device_set_property_bool activateField=%s: %s",
                                          flip > 0 ? "true" : "false", nfc_strerror(baton->pnd));
-                                object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(result));
+                                tag->SetError(result);
                                 break;
                             }
                         }
@@ -153,14 +240,14 @@ namespace {
                               && ((baton->nt.nti.nai.abtAtqa[1] & 0x02) == 0x00)) uiBlocks = 0x7f;
                     }
                     if (nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) <= 0) {
-                        object->Set(Nan::New("error").ToLocalChecked(), Nan::Error("unable to reselect tag"));
+                        tag->SetError("unable to reselect tag");
                         break;
                     }
 
                     if (nfc_device_set_property_bool(baton->pnd, NP_EASY_FRAMING, true) < 0) {
                         snprintf(result, sizeof result, "nfc_device_set_property_bool easyFraming=false: %s",
                                  nfc_strerror(baton->pnd));
-                        object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(result));
+                        tag->SetError(result);
                         break;
                     }
 
@@ -192,7 +279,7 @@ namespace {
                             }
                             if (key_index >= num_keys) {
                                 snprintf(result, sizeof result, "nfc_initiator_transceive_bytes: %s", nfc_strerror(baton->pnd));
-                                object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(result));
+                                tag->SetError(result);
                                 break;
                             }
                         }
@@ -204,26 +291,26 @@ namespace {
 
                         if (res != NFC_ERFTRANS) {
                             snprintf(result, sizeof result, "nfc_initiator_transceive_bytes: %s", nfc_strerror(baton->pnd));
-                            object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(result));
+                            tag->SetError(result);
                         }
                         break;
                     }
                     if (cnt >= 0) break;
 
-                    object->Set(Nan::New("data").ToLocalChecked(), Nan::CopyBuffer((char *)&data, len).ToLocalChecked());
+                    tag->SetData(data, len);
 
-                    object->Set(Nan::New("offset").ToLocalChecked(), Nan::New<Int32>(16 * 4));
+                    tag->SetOffset(16 * 4);
                     break;
                 }
 
                 case 0x44:
                 {
-                    object->Set(Nan::New("tag").ToLocalChecked(), Nan::New("mifare-ultralight").ToLocalChecked());
+                    tag->SetTag("mifare-ultralight");
 
                     if (nfc_device_set_property_bool(baton->pnd, NP_EASY_FRAMING, true) < 0) {
                         snprintf(result, sizeof result, "nfc_device_set_property_bool easyFraming=false: %s",
                                  nfc_strerror(baton->pnd));
-                        object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(result));
+                        tag->SetError(result);
                         break;
                     }
 
@@ -239,23 +326,30 @@ namespace {
 
                         if (res != NFC_ERFTRANS) {
                             snprintf(result, sizeof result, "nfc_initiator_transceive_bytes: %s", nfc_strerror(baton->pnd));
-                            object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(result));
+                            tag->SetError(result);
                         }
                         break;
                     }
                     if (n < cc) break;
 
-                    object->Set(Nan::New("data").ToLocalChecked(), Nan::CopyBuffer((char*)data, len).ToLocalChecked());
+                    tag->SetData(data, len);
 
-                    object->Set(Nan::New("offset").ToLocalChecked(), Nan::New<Int32>(16));
+                    tag->SetOffset(16);
                     break;
                 }
 
                 default:
                     break;
             }
+        }
 
-            busy = false;
+        void HandleProgressCallback(const char *_tag, size_t size) {
+            Nan::HandleScope scope;
+
+            Local<Object> object = Nan::New<Object>();
+            tag->AddToNodeObject(object);
+            delete tag;
+            tag = NULL;
 
             Local<Value> argv[2];
             argv[0] = Nan::New("read").ToLocalChecked();
@@ -267,7 +361,7 @@ namespace {
 
       private:
         NFC *baton;
-        bool busy;
+        NFCCard *tag;
     };
 
 
@@ -282,13 +376,7 @@ namespace {
     NAN_METHOD(NFC::Stop) {
         Nan::HandleScope scope;
         NFC* nfc = ObjectWrap::Unwrap<NFC>(info.This());
-        nfc->run = false;
-        if(nfc->pnd) {
-            nfc_close(nfc->pnd);
-            nfc->pnd = NULL;
-            nfc_exit(nfc->context);
-            nfc->context = NULL;
-        }
+        nfc->stop();
         info.GetReturnValue().Set(info.This());
     }
 
@@ -390,7 +478,6 @@ namespace {
 
         info.GetReturnValue().Set(object);
     }
-
     NAN_MODULE_INIT(init) {
         Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(NFC::New);
         tpl->SetClassName(Nan::New("NFC").ToLocalChecked());
