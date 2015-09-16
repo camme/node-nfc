@@ -69,7 +69,10 @@ indicates that another process has the interface. On MacOS X you can try:
     }).start();
     // optionally the start function may include the deviceID (e.g., 'pn53x_usb:160:012')
 
-    
+## And an extra thanks to...
+
+[jeroenvollenbrock](https://github.com/jeroenvollenbrock) for the huge update he made to this project!
+
 ## License 
 
 (The MIT License)
