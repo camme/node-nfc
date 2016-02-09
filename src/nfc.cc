@@ -80,7 +80,7 @@ namespace {
             if(tag) object->Set(Nan::New("tag").ToLocalChecked(), Nan::New(tag).ToLocalChecked());
             if(error) object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(error));
             if(data) object->Set(Nan::New("data").ToLocalChecked(), Nan::NewBuffer(data, data_size).ToLocalChecked());
-            if(offset) object->Set(Nan::New("offset").ToLocalChecked(), Nan::New<Int32>(offset));
+            if(offset) object->Set(Nan::New("offset").ToLocalChecked(), Nan::New<Int32>((int32_t)offset));
             data = NULL; //ownership transferred to nodejs
         }
 
