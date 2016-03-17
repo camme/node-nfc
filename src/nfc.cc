@@ -79,8 +79,8 @@ namespace {
             if(type) object->Set(Nan::New("type").ToLocalChecked(), Nan::New<Int32>(type));
             if(tag) object->Set(Nan::New("tag").ToLocalChecked(), Nan::New(tag).ToLocalChecked());
             if(error) object->Set(Nan::New("error").ToLocalChecked(), Nan::Error(error));
-            if(data) object->Set(Nan::New("data").ToLocalChecked(), Nan::NewBuffer((char *)&data, data_size).ToLocalChecked());
-            if(offset) object->Set(Nan::New("offset").ToLocalChecked(), Nan::New<Int32>(offset));
+            if(data) object->Set(Nan::New("data").ToLocalChecked(), Nan::NewBuffer(data, data_size).ToLocalChecked());
+            if(offset) object->Set(Nan::New("offset").ToLocalChecked(), Nan::New<Int32>((int32_t)offset));
             data = NULL; //ownership transferred to nodejs
         }
 
@@ -113,7 +113,7 @@ namespace {
         void SetData(const uint8_t *data, size_t data_size) {
             if(this->data) free(this->data);
             this->data_size = data_size;
-            this->data = (uint8_t*)malloc(data_size);
+            this->data = (char*)malloc(data_size);
             memcpy(this->data, data, data_size);
         }
       private:
@@ -125,7 +125,7 @@ namespace {
         char        *error;
         size_t      offset;
         size_t      data_size;
-        uint8_t     *data;
+        char        *data;
     };
 
     class NFCReadWorker : public Nan::AsyncProgressWorker {
