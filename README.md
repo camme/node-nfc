@@ -51,10 +51,10 @@ indicates that another process has the interface. On MacOS X you can try:
       , util = require('util')
       ;
 
-    console.log('version: ' + util.inspect(version, { depth: null }));
+    console.log('nfc.version(): ' + util.inspect(nfc.version(), { depth: null }));
         // { name: 'libfnc', version: '1.7.0' }
 
-    console.log('devices: ' + util.inspect(devices, { depth: null }));
+    console.log('nfc.scan(): ' + util.inspect(nfc.scan(), { depth: null }));
         // { 'pn53x_usb:160:012': { name: 'SCM Micro / SCL3711-NFC&RW', info: { chip: 'PN533 v2.7', ... } } }
 
 ## Reading
