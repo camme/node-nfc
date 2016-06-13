@@ -19,7 +19,7 @@ exports.nfc.parse = function(data) {
 
   results = [];
 
-  for (i = 0, bytes = data.toJSON(); i < bytes.length; i += tlv.len) {
+  for (i = 0, bytes = data.toJSON().data; i < bytes.length; i += tlv.len) {
     tlv = { type: bytes[i++] };
     if ((tlv.type === 0xfe) || (i >= bytes.length)) {
       results.push(tlv);
