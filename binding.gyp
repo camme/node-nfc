@@ -2,9 +2,11 @@
   "targets": [ {
       "target_name": "nfc",
       "sources": [ "src/nfc.cc" ],
-      "libraries": [ "-lnfc" ],
+      "libraries": [ "-lnfc", "-L/usr/local/lib/" ],
       "include_dirs": [
-        "<!(node -e \"require('nan')\")","."
+        "<!(node -e \"require('nan')\")",
+        ".",
+        "/usr/local/include/"
       ],
   } ]
 }
