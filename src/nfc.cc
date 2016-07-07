@@ -148,7 +148,7 @@ namespace {
         }
 
         void HandleErrorCallback() {
-            Local<Value> argv[1];
+            Local<Value> argv[2];
             argv[0] = Nan::New("error").ToLocalChecked();
             argv[1] = Nan::Error(AsyncProgressWorker::ErrorMessage());
 
