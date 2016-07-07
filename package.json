@@ -1,6 +1,6 @@
 {
   "name": "nfc",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Node NFC functionallity through libnfc",
   "main": "index.js",
   "scripts": {
@@ -17,7 +17,7 @@
   "dependencies": {
      "ndef": "0.1.2",
      "bindings": "1.2.1",
-     "nan": "2.0.5",
+     "nan": "2.3.5",
      "node-gyp": "3.0.3"
   },
   "author": "Camilo Tapia <camilo.tapia@gmail.com>",
