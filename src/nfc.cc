@@ -117,6 +117,8 @@ namespace {
             static NAN_METHOD(Start);
             static NAN_METHOD(Stop);
             static NAN_METHOD(Write);
+            static NAN_METHOD(ReadSector);
+            static NAN_METHOD(StartReadWorker);
 
             void stop() {
                 run = false;
@@ -139,104 +141,9 @@ namespace {
             bool claimed;
     };
 
-    /*
-     * Write blocks to NFC card
-     * TODO: Refactor with `AsyncProcessWorker`
-     */
-    NAN_METHOD(NFC::Write) {
-        Nan::HandleScope scope;
-        Isolate *isolate = info.GetIsolate();
 
-        NFC* baton = ObjectWrap::Unwrap<NFC>(info.This());
-        Local<Object> bufferObj    = info[0]->ToObject();
-        char *data   = node::Buffer::Data(bufferObj);
-
-        bool write_otp = false;
-        bool write_lock = false;
-        //bool write_uid = false;
-
-        uint8_t uiBlocks = 0x0f;
-        uint8_t uiPages = uiBlocks;
-        uint32_t uiBlock = 0;
-        uint32_t uiSkippedPages = 0;
-        uint32_t uiPagesWritten = 0;
-        bool bFailure = false;
-
-        mifare_param mp;        // auth(10 bytes), data(16 bytes), value(4 bytes)
-        mifareul_tag mt;        // 4 blocks (64 bytes)
-
-        bzero(&mp, sizeof mp);
-        bzero(&mt, sizeof mt);
-        memcpy(&mt, data, sizeof mt);
-
-        // TODO: figure out how to fix the error and remove the while loop
-        // error   libnfc.driver.pn532_i2c Length checksum mismatch
-        // error   libnfc.chip.pn53x       Unexpected PN53x reply!
-        while (nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) <= 0){
-          printf("Selecting tag...\n");
-        }
-
-        switch (baton->nt.nti.nai.abtAtqa[1]) {
-            case 0x04:
-            {// TODO: Mifare classic
-                break;
-            }
-            case 0x44:
-            { // Mifare ultralight
-                uiSkippedPages = 2;
-                // TODO: only support write 8 pages (2 data blocks) in the first 
-                // sector now, extend to support more sectors.
-                for (uint32_t page = uiSkippedPages; page < ((uiPages / 4) * 4); page++) {
-                    if ((page == 0x2) && (!write_lock)) {
-                      uiSkippedPages++;
-                      continue;
-                    }
-                    if ((page == 0x3) && (!write_otp)) {
-                      uiSkippedPages++;
-                      continue;
-                    }
-                    // Show if the readout went well
-                    if (bFailure) {
-                      // When a failure occured we need to redo the anti-collision
-                      if (nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) <= 0) {
-                        printf("Tag was removed \n");
-                        break;
-                      }
-                      bFailure = false;
-                    }
-                    // For the Mifare Ultralight, this write command can be used
-                    // in compatibility mode, which only actually writes the first
-                    // page (4 bytes). The Ultralight-specific Write command only
-                    // writes one page at a time.
-                    uiBlock = page / 4;
-                    memcpy(mp.mpd.abtData, mt.amb[uiBlock].mbd.abtData + ((page % 4) * 4), 4);
-                    memset(mp.mpd.abtData + 4, 0, 12);
-
-                    uint8_t i =0;
-                    uint8_t *bytes; 
-                    for (i=0, bytes=mp.mpd.abtData; i < (sizeof mp.mpd.abtData / sizeof mp.mpd.abtData[0]); i++) {
-                      printf("%02x ", bytes[i]);
-                    }
-                    printf("\n");
-
-
-                    if (!nfc_initiator_mifare_cmd(baton->pnd, MC_WRITE, page, &mp)) {
-                      bFailure = true;
-                      printf("Failed at page: %d\n", page);
-                    }
-                    else
-                        uiPagesWritten++;
-
-                }   // For loop for writing pages
-
-                break;
-            }
-            default:
-                ;
-        } // switch card type
-        Local<Number> ret = Number::New(isolate, uiPagesWritten);
-        info.GetReturnValue().Set(ret);
     }
+
 
     class NFCCard {
       public:
@@ -271,6 +178,7 @@ namespace {
             if(this->deviceID) delete this->deviceID;
             this->deviceID = strdup(deviceID);
         }
+        
         void SetName(const char *name) {
             if(this->name) delete this->name;
             this->name = strdup(name);
@@ -300,7 +208,7 @@ namespace {
             memcpy(this->data, data, data_size);
         }
 
-      private:
+      public:
         char        *deviceID;
         char        *name;
         char        *uid;
@@ -506,6 +414,7 @@ namespace {
                         command[0] = MC_READ;
                         command[1] = n;
                         res = nfc_initiator_transceive_bytes(baton->pnd, command, 2, dp, cnt, -1);
+                        printf("Read page %ld with %d bytes\n", n, res);
                         if (res >= 0) continue;
 
                         if (res != NFC_ERFTRANS) {
@@ -549,6 +458,206 @@ namespace {
         NFCCard *tag;
     };
 
+    /*
+     * Read NTAG21x sector (4 blocks, 16 pages, or 64 bytes).
+     *
+     * NOTE: Device document: http://www.nxp.com/documents/data_sheet/NTAG213_215_216.pdf
+     */
+    NAN_METHOD(NFC::ReadSector) {
+        NFC* baton = ObjectWrap::Unwrap<NFC>(info.This());
+        Isolate *isolate = info.GetIsolate();
+        int sector = info[0]->Int32Value();
+
+        while(nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) > 0) {
+
+            NFCCard *tag = new NFCCard();
+
+            unsigned long cc, n;
+            char *bp, result[BUFSIZ];
+            const char *sp;
+
+            tag->SetDeviceID(nfc_device_get_connstring(baton->pnd));
+            tag->SetName(nfc_device_get_name(baton->pnd));
+
+            
+            cc = baton->nt.nti.nai.szUidLen;
+            if (cc > sizeof baton->nt.nti.nai.abtUid) cc = sizeof baton->nt.nti.nai.abtUid;
+            char uid[3 * sizeof baton->nt.nti.nai.abtUid];
+            bzero(uid, sizeof uid);
+
+            for (n = 0, bp = uid, sp = ""; n < cc; n++, bp += strlen(bp), sp = ":") {
+                snprintf(bp, sizeof uid - (bp - uid), "%s%02x", sp, baton->nt.nti.nai.abtUid[n]);
+            }
+            tag->SetUID(uid);
+            tag->SetType(baton->nt.nti.nai.abtAtqa[1]);
+
+            switch (baton->nt.nti.nai.abtAtqa[1]) {
+                case 0x44:
+                    {
+                        tag->SetTag("mifare-ultralight");
+
+                        if (nfc_device_set_property_bool(baton->pnd, NP_EASY_FRAMING, true) < 0) {
+                            snprintf(result, sizeof result, "nfc_device_set_property_bool easyFraming=false: %s",
+                                    nfc_strerror(baton->pnd));
+                            tag->SetError(result);
+                            break;
+                        }
+
+                        int cnt, len, res;
+                        uint8_t command[2], data[64], *dp;
+                        for (n = sector*16 + 0, cc = sector*16+0x0f, dp = data, cnt = sizeof data, len = 0, res=0;
+                                n <= cc;
+                                n += 4, dp += res, cnt -= res, len += res) {
+
+                            command[0] = MC_READ;
+                            command[1] = n;
+                            res = nfc_initiator_transceive_bytes(baton->pnd, command, 2, dp, cnt, -1);
+                            //printf("Read page %ld with %d bytes\n", n, res);
+
+                            if (res >= 0) continue;
+
+                            if (res != NFC_ERFTRANS) {
+                                snprintf(result, sizeof result, "nfc_initiator_transceive_bytes: %s", nfc_strerror(baton->pnd));
+                                tag->SetError(result);
+                            }
+                            break;
+                        }
+                        if (n < cc) break;
+
+                        tag->SetData(data, len);
+                        int offset=0;
+                        if (sector == 0) offset=16;
+                        tag->SetOffset(offset);
+                        break;
+                    }
+
+                default:
+                    break;
+            }
+            //printf("Reading sector of device %s:%s with tag: %s\n", tag->deviceID, tag->name, tag->tag);
+            //printf("tag data: %s\n", tag->data);
+
+            //Local<Object> ret = Object::New(isolate, tag);
+            Local<Object> object = Nan::New<Object>();
+            tag->AddToNodeObject(object);
+            delete tag;
+            tag = NULL;
+
+            info.GetReturnValue().Set(object);
+            break;
+        }    
+    }
+    /*
+     * Write blocks to NFC card
+     * TODO: Refactor with `AsyncProcessWorker`
+     */
+    NAN_METHOD(NFC::Write) {
+        Nan::HandleScope scope;
+        Isolate *isolate = info.GetIsolate();
+
+        NFC* baton = ObjectWrap::Unwrap<NFC>(info.This());
+        Local<Object> bufferObj    = info[0]->ToObject();
+        char *data   = node::Buffer::Data(bufferObj);
+        size_t datalen = node::Buffer::Length(bufferObj);
+        /*
+        for(int i = 0; i < datalen; i++) {
+            printf("%02x ", data[i]);
+        }
+        printf("\n");
+        */
+
+        bool write_otp = false;
+        bool write_lock = false;
+        //bool write_uid = false;
+
+        uint8_t uiBlocks = 0x0f;
+        uint8_t uiPages = uiBlocks; 
+        uint32_t uiBlock = 0;
+        uint32_t uiSkippedPages = 0;
+        uint32_t uiPagesWritten = 0;
+        bool bFailure = false;
+
+        mifare_param mp;        // auth(10 bytes), data(16 bytes), value(4 bytes)
+        mifareul_tag mt;        // 4 blocks (64 bytes)
+
+        bzero(&mp, sizeof mp);
+        bzero(&mt, sizeof mt);
+        memcpy(&mt, data, sizeof mt);
+
+        // TODO: figure out how to fix the error and remove the while loop
+        // error   libnfc.driver.pn532_i2c Length checksum mismatch
+        // error   libnfc.chip.pn53x       Unexpected PN53x reply!
+        while (nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) <= 0){
+          printf("Selecting tag...\n");
+        }
+
+        //-$- Calculate how many pages -$-
+        uiPages = datalen / 4;
+
+        switch (baton->nt.nti.nai.abtAtqa[1]) {
+            case 0x04:
+            {// TODO: Mifare classic
+                break;
+            }
+            case 0x44:
+            { // Mifare ultralight
+                uiSkippedPages = 2;
+                // TODO: only support write 8 pages (2 data blocks) in the first 
+                // sector now, extend to support more sectors.
+                char* dp = data;
+                for (uint32_t page = 4; page <= uiPages+4; page++) {
+                    
+                    // Show if the readout went well
+                    if (bFailure) {
+                      // When a failure occured we need to redo the anti-collision
+                      if (nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) <= 0) {
+                        printf("Tag was removed \n");
+                        break;
+                      }
+                      bFailure = false;
+                    }
+                    // For the Mifare Ultralight, this write command can be used
+                    // in compatibility mode, which only actually writes the first
+                    // page (4 bytes). The Ultralight-specific Write command only
+                    // writes one page at a time.
+                    /*
+                    uiBlock = page / 4;
+                    if (uiBlock % 4 == 3) { // Sector trailer
+                        page += 3;
+                        uiPages+=4;
+                        continue;
+                    }
+                    */
+
+                    memcpy(mp.mpd.abtData, dp, 4);
+                    dp += 4;
+                    memset(mp.mpd.abtData + 4, 0, 12);
+
+                    uint8_t i =0;
+                    uint8_t *bytes; 
+                    for (i=0, bytes=mp.mpd.abtData; i < (sizeof mp.mpd.abtData / sizeof mp.mpd.abtData[0]); i++) {
+                      printf("%02x ", bytes[i]);
+                    }
+                    printf("\n");
+
+
+                    if (!nfc_initiator_mifare_cmd(baton->pnd, MC_WRITE, page, &mp)) {
+                      bFailure = true;
+                      printf("Failed at page: %d\n", page);
+                    }
+                    else
+                        uiPagesWritten++;
+
+                }   // For loop for writing pages
+
+                break;
+            }
+            default:
+                ;
+        } // switch card type
+        Local<Number> ret = Number::New(isolate, uiPagesWritten);
+        info.GetReturnValue().Set(ret);
+    }
 
     NAN_METHOD(NFC::New) {
         Nan::HandleScope scope;
@@ -603,14 +712,21 @@ namespace {
         baton->context = context;
         baton->pnd = pnd;
 
-        NFCReadWorker* readWorker = new NFCReadWorker(baton, info.This());
-        Nan::AsyncQueueWorker(readWorker);
-
         Local<Object> object = Nan::New<Object>();
         object->Set(Nan::New("deviceID").ToLocalChecked(), Nan::New(nfc_device_get_connstring(baton->pnd)).ToLocalChecked());
         object->Set(Nan::New("name").ToLocalChecked(), Nan::New(nfc_device_get_name(baton->pnd)).ToLocalChecked());
 
-        info.GetReturnValue().Set(object);
+        info.GetReturnValue().Set(info.This());
+    }
+
+    NAN_METHOD(NFC::StartReadWorker) {
+        Nan::HandleScope scope;
+        NFC* baton = ObjectWrap::Unwrap<NFC>(info.This());
+
+        NFCReadWorker* readWorker = new NFCReadWorker(baton, info.This());
+        Nan::AsyncQueueWorker(readWorker);
+
+        info.GetReturnValue().Set(info.This());
     }
 
     NAN_METHOD(Scan) {
@@ -673,11 +789,13 @@ namespace {
         SetPrototypeMethod(tpl, "start", NFC::Start);
         SetPrototypeMethod(tpl, "stop", NFC::Stop);
         SetPrototypeMethod(tpl, "write", NFC::Write);
+        SetPrototypeMethod(tpl, "readTagSector", NFC::ReadSector);
+        SetPrototypeMethod(tpl, "startReadWorker", NFC::StartReadWorker);
 
         Nan::Export(target, "version", Version);
         Nan::Export(target, "scan", Scan);
         Nan::Set(target, Nan::New("NFC").ToLocalChecked(), tpl->GetFunction());
     };
-}
+
 
 NODE_MODULE(nfc, init)
