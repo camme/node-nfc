@@ -141,10 +141,6 @@ namespace {
             bool claimed;
     };
 
-
-    }
-
-
     class NFCCard {
       public:
         NFCCard() {
@@ -208,7 +204,7 @@ namespace {
             memcpy(this->data, data, data_size);
         }
 
-      public:
+      private:
         char        *deviceID;
         char        *name;
         char        *uid;
@@ -465,7 +461,6 @@ namespace {
      */
     NAN_METHOD(NFC::ReadSector) {
         NFC* baton = ObjectWrap::Unwrap<NFC>(info.This());
-        Isolate *isolate = info.GetIsolate();
         int sector = info[0]->Int32Value();
 
         while(nfc_initiator_select_passive_target(baton->pnd, nmMifare, NULL, 0, &baton->nt) > 0) {
@@ -566,14 +561,9 @@ namespace {
         printf("\n");
         */
 
-        bool write_otp = false;
-        bool write_lock = false;
-        //bool write_uid = false;
-
         uint8_t uiBlocks = 0x0f;
         uint8_t uiPages = uiBlocks; 
-        uint32_t uiBlock = 0;
-        uint32_t uiSkippedPages = 0;
+        uint32_t uiSkippedPages = 4;
         uint32_t uiPagesWritten = 0;
         bool bFailure = false;
 
@@ -601,11 +591,10 @@ namespace {
             }
             case 0x44:
             { // Mifare ultralight
-                uiSkippedPages = 2;
-                // TODO: only support write 8 pages (2 data blocks) in the first 
-                // sector now, extend to support more sectors.
+
                 char* dp = data;
-                for (uint32_t page = 4; page <= uiPages+4; page++) {
+                uiSkippedPages = 4; // -$- Never write to first block!! -$-
+                for (uint8_t page = uiSkippedPages; page <= uiPages+uiSkippedPages; page++) {
                     
                     // Show if the readout went well
                     if (bFailure) {
@@ -616,13 +605,11 @@ namespace {
                       }
                       bFailure = false;
                     }
-                    // For the Mifare Ultralight, this write command can be used
-                    // in compatibility mode, which only actually writes the first
-                    // page (4 bytes). The Ultralight-specific Write command only
-                    // writes one page at a time.
+
                     /*
-                    uiBlock = page / 4;
-                    if (uiBlock % 4 == 3) { // Sector trailer
+                    // -$- Skip sector trailer -$-
+                    uint8_t uiBlock = page / 4;
+                    if (uiBlock % 4 == 3) { 
                         page += 3;
                         uiPages+=4;
                         continue;
@@ -796,6 +783,6 @@ namespace {
         Nan::Export(target, "scan", Scan);
         Nan::Set(target, Nan::New("NFC").ToLocalChecked(), tpl->GetFunction());
     };
-
+}
 
 NODE_MODULE(nfc, init)
