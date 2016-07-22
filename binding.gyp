@@ -6,7 +6,8 @@
       "include_dirs": [
         "<!(node -e \"require('nan')\")",
         ".",
-        "/usr/local/include/"
+        "/usr/local/include/",
+        "/usr/include/node"
       ],
   } ]
 }
