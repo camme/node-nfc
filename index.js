@@ -41,6 +41,45 @@ exports.nfc.parse = function(data) {
   return results;
 };
 
+//------------------------------------------------------------------------------
+//
+// manublk (Buffer): the manufacture block.
+//------------------------------------------------------------------------------
+exports.nfc.parseManufactureBlk = function(manublk) {
+    var i, manudata, uid, lock, cc;
+    manudata = {};
+    uid = [];
+    lock= Array(2); // lock bytes
+    cc = [];    // Capability container
+
+    for (i=0; i<=2; i++) {
+        uid.push(manublk[i]);
+    }
+    for (i=4; i<=7; i++) {
+        uid.push(manublk[i]);
+    }
+    manudata.uid = uid;
+
+    manudata.cb0 = manublk[3];  // Check byte 0: CT(0x88) ^ SN0 ^ SN1 ^ SN2
+    manudata.cb1 = manublk [8]; // Check byte 1: SN3 ^ SN4 ^ SN5 ^ SN6
+
+    manudata.internal = manublk[9];
+    
+    lock[0] = manublk[10];
+    lock[1] = manublk[11];
+    manudata.lock = lock;
+
+    for (i=12; i<16; i++) {
+        cc.push(manublk[i]);
+    }
+    manudata.cc = cc;
+
+    return manudata;
+    
+}
+
+
+
 exports.nfc.scan = function() {
   var device, devices, i, info, j, k, kv, mod, mods, prop, props, protocol, results, speeds, v, x;
 
