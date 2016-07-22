@@ -203,7 +203,6 @@ namespace {
             this->data = (char*)malloc(data_size);
             memcpy(this->data, data, data_size);
         }
-
       private:
         char        *deviceID;
         char        *name;
@@ -410,7 +409,6 @@ namespace {
                         command[0] = MC_READ;
                         command[1] = n;
                         res = nfc_initiator_transceive_bytes(baton->pnd, command, 2, dp, cnt, -1);
-                        printf("Read page %ld with %d bytes\n", n, res);
                         if (res >= 0) continue;
 
                         if (res != NFC_ERFTRANS) {
@@ -457,7 +455,15 @@ namespace {
     /*
      * Read NTAG21x sector (4 blocks, 16 pages, or 64 bytes).
      *
-     * NOTE: Device document: http://www.nxp.com/documents/data_sheet/NTAG213_215_216.pdf
+     * Args:
+     *  start sector #: int 
+     *
+     * Returns:
+     *  tag object: dictionary
+     *
+     * NOTE: 
+     *  Device document: http://www.nxp.com/documents/data_sheet/NTAG213_215_216.pdf
+     *
      */
     NAN_METHOD(NFC::ReadSector) {
         NFC* baton = ObjectWrap::Unwrap<NFC>(info.This());
@@ -532,7 +538,6 @@ namespace {
             //printf("Reading sector of device %s:%s with tag: %s\n", tag->deviceID, tag->name, tag->tag);
             //printf("tag data: %s\n", tag->data);
 
-            //Local<Object> ret = Object::New(isolate, tag);
             Local<Object> object = Nan::New<Object>();
             tag->AddToNodeObject(object);
             delete tag;
@@ -542,9 +547,15 @@ namespace {
             break;
         }    
     }
+
     /*
-     * Write blocks to NFC card
-     * TODO: Refactor with `AsyncProcessWorker`
+     * Write tag data synchronously.
+     *
+     * Args:
+     *  tag data: node buffer object.
+     *
+     * Returns:
+     *  The number of pages written: int
      */
     NAN_METHOD(NFC::Write) {
         Nan::HandleScope scope;
@@ -766,7 +777,6 @@ namespace {
 
         info.GetReturnValue().Set(object);
     }
-
 
     NAN_MODULE_INIT(init) {
         Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(NFC::New);
